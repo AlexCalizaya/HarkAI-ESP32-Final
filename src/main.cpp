@@ -1,11 +1,28 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
-//#include <ArduinoJson.h>
+#include <ArduinoJson.h>
+
+const int JSON_BUFFER = 256;//Tamaño del buffer, para este caso 256 bytes
 
 // Definición de obj de librerías 
 WiFiClient espClient; //Cliente del esp
 PubSubClient client(espClient);
+DynamicJsonDocument doc(JSON_BUFFER); // Define el tamaño del buffer 
+
+struct Datos
+{
+  const char *campo1;
+  const char *campo2;
+};
+Datos datatx;
+
+struct Numeros
+{
+  const char *numero;
+};
+Numeros numbertx;
+
 
 // Credenciales WiFi
 const char *ssid = "HUAWEI-2.4G-By28";// Nombre del Wifi
@@ -72,16 +89,60 @@ void reconnect()
 
 // Funcion Callback
 
-void callback(char* topic, byte* payload, unsigned int length){
-  Serial.print("Received messages; ");
-  Serial.println(topic);
-  for(int i=0; i<length; i++){
-    Serial.print((char) payload[i]);
+// void callback(char* topic, byte* payload, unsigned int length){
+//   Serial.print("Received messages; ");
+//   Serial.println(topic);
+//   for(int i=0; i<length; i++){
+//     Serial.print((char) payload[i]);
+//   }
+//   Serial.println();
+// }
+
+Datos read_json(byte *message)
+{
+  DynamicJsonDocument doc(JSON_BUFFER);
+  DeserializationError error = deserializeJson(doc, (char *)message);
+
+  if (error)
+  {
+    Serial.print(F("Error al analizar el JSON: "));
+    Serial.println(error.c_str());
   }
-  Serial.println();
+
+  Datos datos;
+  datos.campo1 = doc["nombre"];
+  datos.campo2 = doc["codigo"];
+  return datos;
 }
 
 
+void send_json(Numeros numbertx)
+{
+  // Crear un objeto JSON y asignar valores desde la estructura
+  StaticJsonDocument<128> jsonDoc;
+  jsonDoc["numero"] = numbertx.numero;
+
+  // Buffer para almacenar la cadena JSON
+  char buffer[128];
+
+  // Serializar el JSON directamente en el buffer
+  size_t n = serializeJson(jsonDoc, buffer, sizeof(buffer));
+
+  // Publicar el buffer directamente en el tema MQTT
+  client.publish(outTopic, buffer, n);
+}
+
+
+
+void callback(char *topic, byte *message, int length)
+{
+    Serial.println("Mensaje recibido:");
+    message[length] = '\0';
+    Serial.println((char *)message);
+    datatx=read_json(message);
+    Serial.println(datatx.campo1);
+    Serial.println(datatx.campo2);
+}
 
 void setup() {
   Serial.begin(9600);
@@ -103,7 +164,8 @@ void loop() {
     snprintf(messages, 75, " Count: %ld", count);
     Serial.print("Sending messages: ");
     Serial.println(messages);
-    client.publish(outTopic, messages);
+    numbertx.numero = messages;
+    send_json(numbertx);
     lastTime = millis();
   }
 }
