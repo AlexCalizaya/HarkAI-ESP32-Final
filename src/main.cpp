@@ -12,9 +12,9 @@ DynamicJsonDocument doc(JSON_BUFFER); // Define el tamaño del buffer
 
 struct Datos
 {
-  const char *sv_state;
-  const char *count;
-  const char *detection;
+  const char *sv_state; // Indica el estado del sistema (1: El sistema está conectado, 0 : El sistema no lo está)
+  const char *count; // Indica el conteo de la infracción por ausencia de EPP después de los 15 segundos
+  const char *detection; 
   const char *state;
   const char *mode;
   const char *id;
@@ -31,8 +31,8 @@ const char *brokerUser = "HarkAI-User";// Contraseña
 const char *brokerPass = "nomeacuerdo";// Contraseña
 
 // Tópicos
-const char *inTopic = "/CALI/IN";
-const char *outTopic = "/CALI/OUT";
+const char *inTopic = "CARRANZA/HARKAI"; // Del broker al ESP32
+const char *outTopic = "CARRANZA/HARKAI/RX"; // Del ESP32 al broker
 
 // ------------------------
 //   Variables globales  //
@@ -40,7 +40,7 @@ const char *outTopic = "/CALI/OUT";
 
 // Autenticadores
 
-const char *id = "1"; // ID del muchacho
+const char *id = "2"; // ID del muchacho
 
 // Tiempo
 
@@ -228,6 +228,8 @@ void cambio_modo(){
 //Funcion para parpadeo antes de conexion
 void InicioSistema(int flagConexionSistema){
   tiempoActual=millis(); //Actualización del tiempo actual en millis
+  digitalWrite(led_red, HIGH);
+  digitalWrite(led_yellow, HIGH);
 
   if(flagConexionSistema==0){//Si es 0 el led parpadeará
     if(((tiempoActual - tiempoIniParpadeoSist) >= frecuenciaParpadeo1)){
@@ -346,7 +348,7 @@ void wifiInit() {
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED){
-    flagconectado=1;
+    flagconectado=0;
     InicioSistema(flagconectado);
     Serial.print(".");
     delay(100);
@@ -368,7 +370,7 @@ void reconnect()
   while (!client.connected())
   {
     Serial.println("Connecting to MQTT...");
-    if (client.connect("HARKAI-ESP32-Prueba", brokerUser, brokerPass))
+    if (client.connect("HARKAI-ESP32-Prueba-2", brokerUser, brokerPass))
     {
       Serial.println("Conexión exitosa");
       Serial.print(client.state());
@@ -393,8 +395,8 @@ void callback(char *topic, byte *message, int length)
     message[length] = '\0';
     Serial.println((char *)message);
     datatx=read_json(message);
-    Serial.println(String(datatx.mode));
-    Serial.println(mode_before);
+    // Serial.println(String(datatx.mode));
+    // Serial.println(mode_before);
     states_changed(String(datatx.mode));
     if(state_change){// Se verifica si se ha cambiado de modo
       cambio_modo(); 
