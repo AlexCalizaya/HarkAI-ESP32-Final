@@ -78,6 +78,18 @@ int test_mode = hooter;
 
 bool outputEnabled = false;  // Inicialmente deshabilitado
 
+// Define the GPIO pins for the button and the output pin
+const int buttonPin = 0;  // GPIO 0 for button input
+
+// Variables to store the button stateButton and debouncing
+bool flagEstadoBoton = HIGH;      // Variable to store the current button stateButton
+bool estadoAnteriorBoton = HIGH;  // Variable to store the last button stateButton
+unsigned long tiempoBoton = 0;
+unsigned long tiempoDelayBoton = 100;
+int estadoActualBoton=1;
+
+bool stateButton = false;
+
 // Funciones lógicas
 
 
@@ -133,6 +145,7 @@ void Init_leds()
   pinMode(buzzer, OUTPUT);
   pinMode(hooter, OUTPUT);
   pinMode(rele2, OUTPUT);
+  pinMode(buttonPin, INPUT_PULLUP);
   
   digitalWrite(led_green, HIGH);
   digitalWrite(led_red, HIGH);
@@ -180,6 +193,47 @@ void states_changed(String estadoActual_modo){
     mode_before = estadoActual_modo;
     state_change = 1;
   }
+}
+
+
+void activacionManual(){
+
+  estadoActualBoton = digitalRead(buttonPin); // Lee el estado del botón
+
+  if (estadoActualBoton != estadoAnteriorBoton) {
+    tiempoBoton = millis();
+  }
+
+  if ((millis() - tiempoBoton) > tiempoDelayBoton) {
+    if (estadoActualBoton != flagEstadoBoton) {// Si se presiona LOW!=HIGH;
+      flagEstadoBoton = estadoActualBoton;// Actualizamos el estado de flag en LOW
+      
+      if (estadoActualBoton == LOW) {
+        stateButton = !stateButton; // Cambio de estado del boton
+        if (stateButton) {
+          Serial.println("Activar secuencia manual");
+          datatx.sv_state = "1";
+          datatx.count = "0";
+          datatx.detection = "1";
+          datatx.state = "0";
+        } else {
+          Serial.println("Desactivar secuencia manual");
+          flagLedAmbar = 0;
+          safeDigitalWrite(led_red, HIGH);
+          safeDigitalWrite(led_yellow, HIGH);
+          safeDigitalWrite(test_mode, HIGH);
+          tiempoDetected = millis();
+          tiempoAmbarDetected = millis();
+          frecuenciaParpadeo = frecuenciaParpadeo1;
+          datatx.sv_state = "1";
+          datatx.count = "0";
+          datatx.detection = "0";
+          datatx.state = "0";
+        }
+      }
+    }
+  }
+  estadoAnteriorBoton = estadoActualBoton;
 }
 
 
@@ -423,6 +477,8 @@ void loop() {
     client.loop();
 
     tiempoActual=millis();
+
+    activacionManual();
 
     Serial.println(String(datatx.detection));
     if(String(datatx.detection)=="0"){
