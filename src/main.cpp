@@ -22,8 +22,8 @@ struct Datos
 Datos datatx;
 
 // Credenciales WiFi
-const char *ssid = "CONSULTORIA";// Nombre del Wifi
-const char *password = "nomeacuerdo";// Contraseña
+const char *ssid = "Harkcum_Labs";// Nombre del Wifi
+const char *password = "nomeacuerdo1956";// Contraseña
 
 // Broker MQTT
 const char *mqtt_server = "broker.emqx.io"; //Servidor mqtt del sistema
@@ -59,7 +59,7 @@ int flagconectado=0;//Flag que indica si el sistema está conectado o no
 int flagLedAmbar = 0; // Indica cuando el estado del los 15 segundos está activo, es decir cuando se detecta falta de EPP
 int num_count = 0; // Cuenta de reportes realizados
 int state_change;
-String mode_before = "0";
+String mode_before = "1";
 
 char messages[50];
 
@@ -85,7 +85,7 @@ const int buttonPin = 0;  // GPIO 0 for button input
 bool flagEstadoBoton = HIGH;      // Variable to store the current button stateButton
 bool estadoAnteriorBoton = HIGH;  // Variable to store the last button stateButton
 unsigned long tiempoBoton = 0;
-unsigned long tiempoDelayBoton = 100;
+unsigned long tiempoDelayBoton = 50;
 int estadoActualBoton=1;
 
 bool stateButton = false;
@@ -165,7 +165,7 @@ void Init_System()
   datatx.count = "0";
   datatx.detection = "0";
   datatx.state = "0";
-  datatx.mode = "0";
+  datatx.mode = "1";
   datatx.id=id; // Asignación de ID del dispositivo
 
   digitalWrite(led_green, LOW);
@@ -210,25 +210,31 @@ void activacionManual(){
       
       if (estadoActualBoton == LOW) {
         stateButton = !stateButton; // Cambio de estado del boton
-        if (stateButton) {
+        if(String(datatx.detection)=="0") {
           Serial.println("Activar secuencia manual");
           datatx.sv_state = "1";
           datatx.count = "0";
           datatx.detection = "1";
           datatx.state = "0";
-        } else {
+          //test_mode=buzzer;
+          //.mode = "0";
+          datatx.id=id; // Asignación de ID del dispositivo
+        }else if(String(datatx.detection)=="1"){
           Serial.println("Desactivar secuencia manual");
-          flagLedAmbar = 0;
-          safeDigitalWrite(led_red, HIGH);
-          safeDigitalWrite(led_yellow, HIGH);
-          safeDigitalWrite(test_mode, HIGH);
-          tiempoDetected = millis();
-          tiempoAmbarDetected = millis();
-          frecuenciaParpadeo = frecuenciaParpadeo1;
+          // flagLedAmbar = 0;
+          // safeDigitalWrite(led_red, HIGH);
+          // safeDigitalWrite(led_yellow, HIGH);
+          // safeDigitalWrite(test_mode, HIGH);
+          // tiempoDetected = millis();
+          // tiempoAmbarDetected = millis();
+          // frecuenciaParpadeo = frecuenciaParpadeo1;
           datatx.sv_state = "1";
           datatx.count = "0";
           datatx.detection = "0";
           datatx.state = "0";
+          //test_mode=buzzer;
+          //datatx.mode = "0";
+          datatx.id=id; // Asignación de ID del dispositivo
         }
       }
     }
@@ -480,17 +486,16 @@ void loop() {
 
     activacionManual();
 
-    Serial.println(String(datatx.detection));
+    Serial.println(String(datatx.mode));
     if(String(datatx.detection)=="0"){
       tiempoAmbarDetected=millis();
       tiempoDetected=millis();
     }
     
-    Serial.println("Loop Principal");
-    
+    //Serial.println("Loop Principal");
 
     if ((tiempoActual - lastTime > frecuenciaPrincipal) && String(datatx.id)==id){
-      Serial.println("Dentro de la lógica principal");
+      //Serial.println("Dentro de la lógica principal");
       Detected();
       lastTime = millis();
     }
