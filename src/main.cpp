@@ -22,8 +22,8 @@ struct Datos
 Datos datatx;
 
 // Credenciales WiFi
-const char *ssid = "Harkcum_Labs";// Nombre del Wifi
-const char *password = "nomeacuerdo1956";// Contraseña
+const char *ssid = "HUAWEI-2.4G-By28";// Nombre del Wifi
+const char *password = "DEC5uTCQ";// Contraseña
 
 // Broker MQTT
 const char *mqtt_server = "broker.emqx.io"; //Servidor mqtt del sistema
@@ -401,6 +401,7 @@ void Detected()
 
 // Función Inicio WiFi
 void wifiInit() {
+  Serial.println("LCD: ENTABLANDO CONEXIÓN WIFI");
   Serial.print("Connecting to ");
   Serial.println(ssid);
 
@@ -412,12 +413,14 @@ void wifiInit() {
     InicioSistema(flagconectado);
     Serial.print(".");
     delay(100);
+    Serial.println("Memoria Libre: " + ESP.getFreeSketchSpace());
   }
 
   // Conexión exitosa a WiFi
   Serial.println("");
   Serial.println(WiFi.status()); // Se verifica la conexión de WiFi con status: WL_CONNECTED. Ref: https://www.arduino.cc/reference/en/libraries/wifi/wifi.status/
   Serial.println("WiFi connected");
+  Serial.println("LCD: CONEXIÓN WIFI ESTABLECIDA CON ÉXITO");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP()); // Se printea la IP de conexión
   flagconectado=1;
@@ -429,10 +432,12 @@ void reconnect()
 {
   while (!client.connected())
   {
+    Serial.println("LCD: ENTABLANDO CONEXIÓN CON EL BROKER");
     Serial.println("Connecting to MQTT...");
     if (client.connect("HARKAI-ESP32-Prueba-2", brokerUser, brokerPass))
     {
       Serial.println("Conexión exitosa");
+      Serial.println("LCD: CONEXIÓN CON EL BROKER ESTABLECIDA CON ÉXITO");
       Serial.print(client.state());
       client.subscribe(inTopic);
       datatx.sv_state="1"; //Indica que la conexión al broker es exitosa
@@ -440,6 +445,7 @@ void reconnect()
     }
     else
     {
+      Serial.println("LCD: CONEXIÓN FALLIDA CON EL BROKER - REINTENTANDO EN 3 SEGUNDOS");
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 3 seconds");
@@ -464,6 +470,7 @@ void callback(char *topic, byte *message, int length)
 }
 
 void setup() {
+  Serial.println("LCD: INICIO DEL SETEO DE LA ESP32");
   Serial.begin(9600);
   Init_leds();
   Init_System();
@@ -482,9 +489,13 @@ void loop() {
     }
     client.loop();
 
+    Serial.println("Memoria Libre: " + ESP.getFreeSketchSpace());
+
     tiempoActual=millis();
 
     activacionManual();
+    
+    Serial.println("LCD: LOOP PRINCIPAL");
 
     Serial.println(String(datatx.mode));
     if(String(datatx.detection)=="0"){
