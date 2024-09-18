@@ -248,6 +248,7 @@ void cambio_modo(){
   if (String(datatx.id)==id) {
     if (String(datatx.mode) == "0") { // Modo normal
       Serial.println("Modo normal activado");
+      Serial.println("LCD: MODO NORMAL ACTIVADO [0]");
       test_mode=hooter;
       outputEnabled = true;
       delay(1000);
@@ -258,6 +259,7 @@ void cambio_modo(){
     else if (String(datatx.mode) == "1") // Modo prueba
     {
       Serial.println("Modo prueba activado");
+      Serial.println("LCD: MODO PRUEBA ACTIVADO [1]");
       digitalWrite(hooter, HIGH);
       digitalWrite(buzzer, HIGH);
       test_mode=buzzer;
@@ -270,6 +272,7 @@ void cambio_modo(){
     else if (String(datatx.mode) == "2") // Modo silencio
     {
       Serial.println("Modo silencio activado");
+      Serial.println("LCD: MODO SILENCIO ACTIVADO [2]");
       digitalWrite(led_red, HIGH);
       digitalWrite(led_green, HIGH);
       digitalWrite(led_yellow, HIGH);
@@ -315,6 +318,7 @@ void InicioSistema(int flagConexionSistema){
 void Finish()
 {
   Serial.print("Se entro a la funcion Finish");
+  Serial.print("LCD: FINALIZACION DE LA SECUENCIA - LED ROJO");
   Serial.println("Led rojo encendido");
   safeDigitalWrite(led_red, LOW); //<- Descomentar
   safeDigitalWrite(test_mode, LOW);
@@ -347,6 +351,7 @@ void Finish()
   tiempoDetected=tiempoActual;
   tiempoAmbarDetected=tiempoActual;
   Serial.print("Se terminó la funcion Finish");
+  
 }
 
 //Activa parpadeo led ambar por 15seg
@@ -354,6 +359,7 @@ void Detected()
 {
   if (String(datatx.detection) == "1" && String(datatx.state)=="0")
   {
+    Serial.print("LCD: ESTADO DE DETECCIÓN - LED AMARILLO");
     Serial.println("Detected");
     if((tiempoActual - tiempoAmbarDetected) >= frecuenciaParpadeo){
       if(flagparpadeoAmbar==0){
@@ -495,13 +501,16 @@ void loop() {
 
     activacionManual();
     
-    Serial.println("LCD: LOOP PRINCIPAL");
+    
+    
 
     Serial.println(String(datatx.mode));
     if(String(datatx.detection)=="0"){
+      Serial.println("LCD: ESTADO PRINCIPAL - LED AMARRILLO APAGADO");
       tiempoAmbarDetected=millis();
       tiempoDetected=millis();
     }
+    Serial.println("LCD: ESTADO DE DATATX: " + String(datatx.sv_state) + String(datatx.count) + String(datatx.detection) + String(datatx.state) + String(datatx.mode) + String(datatx.id));
     
     //Serial.println("Loop Principal");
 
