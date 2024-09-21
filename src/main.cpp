@@ -22,13 +22,11 @@ struct Datos
 Datos datatx;
 
 // Credenciales WiFi
-const char *ssid = "HUAWEI-2.4G-By28";// Nombre del Wifi
-const char *password = "DEC5uTCQ";// Contraseña
+const char *ssid = "Harkcum_Labs";// Nombre del Wifi
+const char *password = "nomeacuerdo1956";// Contraseña
 
 // Broker MQTT
 const char *mqtt_server = "broker.emqx.io"; //Servidor mqtt del sistema
-const char *brokerUser = "HarkAI-User";// Contraseña
-const char *brokerPass = "nomeacuerdo";// Contraseña
 
 // Tópicos
 const char *inTopic = "CARRANZA/HARKAI"; // Del broker al ESP32
@@ -40,7 +38,8 @@ const char *outTopic = "CARRANZA/HARKAI/RX"; // Del ESP32 al broker
 
 // Autenticadores
 
-const char *id = "2"; // ID del muchacho
+const char *id = "1"; // ID del muchacho
+String clientID = "HARKAI-ESP32-" + String(id);
 
 // Tiempo
 
@@ -59,7 +58,7 @@ int flagconectado=0;//Flag que indica si el sistema está conectado o no
 int flagLedAmbar = 0; // Indica cuando el estado del los 15 segundos está activo, es decir cuando se detecta falta de EPP
 int num_count = 0; // Cuenta de reportes realizados
 int state_change;
-String mode_before = "1";
+String mode_before = "0";
 
 char messages[50];
 
@@ -76,19 +75,7 @@ const int rele2 = 35; // Para backup [2RM:IN2] CABLE NARANJA 35
 // Variable global para testeo
 int test_mode = hooter;
 
-bool outputEnabled = false;  // Inicialmente deshabilitado
-
-// Define the GPIO pins for the button and the output pin
-const int buttonPin = 0;  // GPIO 0 for button input
-
-// Variables to store the button stateButton and debouncing
-bool flagEstadoBoton = HIGH;      // Variable to store the current button stateButton
-bool estadoAnteriorBoton = HIGH;  // Variable to store the last button stateButton
-unsigned long tiempoBoton = 0;
-unsigned long tiempoDelayBoton = 50;
-int estadoActualBoton=1;
-
-bool stateButton = false;
+bool outputEnabled = true;  // Inicialmente deshabilitado
 
 // Funciones lógicas
 
@@ -145,7 +132,6 @@ void Init_leds()
   pinMode(buzzer, OUTPUT);
   pinMode(hooter, OUTPUT);
   pinMode(rele2, OUTPUT);
-  pinMode(buttonPin, INPUT_PULLUP);
   
   digitalWrite(led_green, HIGH);
   digitalWrite(led_red, HIGH);
@@ -165,7 +151,7 @@ void Init_System()
   datatx.count = "0";
   datatx.detection = "0";
   datatx.state = "0";
-  datatx.mode = "1";
+  datatx.mode = "0";
   datatx.id=id; // Asignación de ID del dispositivo
 
   digitalWrite(led_green, LOW);
@@ -181,7 +167,7 @@ void Init_System()
 }
 
 void safeDigitalWrite(int pin, int value) {
-    if (outputEnabled) {
+    if (outputEnabled || pin == led_green) {
         digitalWrite(pin, value);
     }
 }
@@ -195,106 +181,31 @@ void states_changed(String estadoActual_modo){
   }
 }
 
-
-void activacionManual(){
-
-  estadoActualBoton = digitalRead(buttonPin); // Lee el estado del botón
-
-  if (estadoActualBoton != estadoAnteriorBoton) {
-    tiempoBoton = millis();
-  }
-
-  if ((millis() - tiempoBoton) > tiempoDelayBoton) {
-    if (estadoActualBoton != flagEstadoBoton) {// Si se presiona LOW!=HIGH;
-      flagEstadoBoton = estadoActualBoton;// Actualizamos el estado de flag en LOW
-      
-      if (estadoActualBoton == LOW) {
-        stateButton = !stateButton; // Cambio de estado del boton
-        if(String(datatx.detection)=="0") {
-          Serial.println("Activar secuencia manual");
-          datatx.sv_state = "1";
-          datatx.count = "0";
-          datatx.detection = "1";
-          datatx.state = "0";
-          //test_mode=buzzer;
-          //.mode = "0";
-          datatx.id=id; // Asignación de ID del dispositivo
-        }else if(String(datatx.detection)=="1"){
-          Serial.println("Desactivar secuencia manual");
-          // flagLedAmbar = 0;
-          // safeDigitalWrite(led_red, HIGH);
-          // safeDigitalWrite(led_yellow, HIGH);
-          // safeDigitalWrite(test_mode, HIGH);
-          // tiempoDetected = millis();
-          // tiempoAmbarDetected = millis();
-          // frecuenciaParpadeo = frecuenciaParpadeo1;
-          datatx.sv_state = "1";
-          datatx.count = "0";
-          datatx.detection = "0";
-          datatx.state = "0";
-          //test_mode=buzzer;
-          //datatx.mode = "0";
-          datatx.id=id; // Asignación de ID del dispositivo
-        }
-      }
-    }
-  }
-  estadoAnteriorBoton = estadoActualBoton;
-}
-
-
-void cambio_modo(){
-  
-  if (String(datatx.id)==id) {
-    if (String(datatx.mode) == "0") { // Modo normal
-      Serial.println("Modo normal activado");
-      Serial.println("LCD: MODO NORMAL ACTIVADO [0]");
-      test_mode=hooter;
-      outputEnabled = true;
-      delay(1000);
-      tiempoActual=millis();
-      tiempoAmbarDetected=millis();
-      tiempoDetected=millis();
-    }
-    else if (String(datatx.mode) == "1") // Modo prueba
-    {
-      Serial.println("Modo prueba activado");
-      Serial.println("LCD: MODO PRUEBA ACTIVADO [1]");
-      digitalWrite(hooter, HIGH);
-      digitalWrite(buzzer, HIGH);
-      test_mode=buzzer;
-      outputEnabled = true;
-      delay(1000);
-      tiempoActual=millis();
-      tiempoAmbarDetected=millis();
-      tiempoDetected=millis();
-    }
-    else if (String(datatx.mode) == "2") // Modo silencio
-    {
-      Serial.println("Modo silencio activado");
-      Serial.println("LCD: MODO SILENCIO ACTIVADO [2]");
-      digitalWrite(led_red, HIGH);
-      digitalWrite(led_green, HIGH);
-      digitalWrite(led_yellow, HIGH);
-      digitalWrite(hooter, HIGH);
-      digitalWrite(buzzer, HIGH);
-      test_mode=buzzer;
-      outputEnabled = false;
-      delay(1000);
-      tiempoActual=millis();
-      tiempoAmbarDetected=millis();
-      tiempoDetected=millis();
-    }
-  }
-}
-
 //Funcion para parpadeo antes de conexion
 void InicioSistema(int flagConexionSistema){
   tiempoActual=millis(); //Actualización del tiempo actual en millis
-  digitalWrite(led_red, HIGH);
-  digitalWrite(led_yellow, HIGH);
 
   if(flagConexionSistema==0){//Si es 0 el led parpadeará
+    if(((tiempoActual - tiempoIniParpadeoSist) >= frecuenciaParpadeo1)){
+      if(flagparpadeoVerde==0){
+        safeDigitalWrite(led_green, LOW); 
+        safeDigitalWrite(led_yellow, LOW);
+        safeDigitalWrite(led_red, LOW); 
+        Serial.println("Todos los leds encendidos");
+      }
+      if(flagparpadeoVerde==1){
+        safeDigitalWrite(led_green, HIGH); 
+        safeDigitalWrite(led_yellow, HIGH); 
+        safeDigitalWrite(led_red, HIGH);
+        Serial.println("Todos los leds apagados");
+      }
+      flagparpadeoVerde= 1 - flagparpadeoVerde;
+      tiempoIniParpadeoSist = millis(); // Guarda el tiempo de inicio del millis
+    }
+  }
+  else if(flagConexionSistema==1){//Si es 1, el led se mantendrá encendido
+    digitalWrite(led_red, HIGH);
+    digitalWrite(led_yellow, HIGH);
     if(((tiempoActual - tiempoIniParpadeoSist) >= frecuenciaParpadeo1)){
       if(flagparpadeoVerde==0){
         safeDigitalWrite(led_green, LOW); // Activa el relé verde
@@ -308,9 +219,62 @@ void InicioSistema(int flagConexionSistema){
       tiempoIniParpadeoSist = millis(); // Guarda el tiempo de inicio del millis
     }
   }
-  else if(flagConexionSistema==1){//Si es 1, el led se mantendrá encendido
+  else if(flagConexionSistema==2){//Si es 2, el led se mantendrá encendido
+    digitalWrite(led_red, HIGH);
+    digitalWrite(led_yellow, HIGH);
     safeDigitalWrite(led_green, LOW);
     Serial.println("Led verde encendido");
+  }
+}
+
+void cambio_modo(){
+  
+  if (String(datatx.id)==id) {
+    if (String(datatx.mode) == "0") { // Modo normal
+      Serial.println("Modo normal activado");
+      test_mode=hooter;
+      outputEnabled = true;
+      flagconectado=2;
+      InicioSistema(flagconectado);
+      delay(1000);
+      tiempoActual=millis();
+      tiempoAmbarDetected=millis();
+      tiempoDetected=millis();
+      frecuenciaParpadeo=frecuenciaParpadeo1;
+    }
+    else if (String(datatx.mode) == "1") // Modo prueba
+    {
+      Serial.println("Modo prueba activado");
+      digitalWrite(hooter, HIGH);
+      digitalWrite(buzzer, HIGH);
+      test_mode=buzzer;
+      outputEnabled = true;
+      flagconectado=2;
+      InicioSistema(flagconectado);
+      delay(1000);
+      tiempoActual=millis();
+      tiempoAmbarDetected=millis();
+      tiempoDetected=millis();
+      frecuenciaParpadeo=frecuenciaParpadeo1;
+    }
+    else if (String(datatx.mode) == "2") // Modo silencio
+    {
+      Serial.println("Modo silencio activado");
+      digitalWrite(led_red, HIGH);
+      digitalWrite(led_green, LOW);
+      digitalWrite(led_yellow, HIGH);
+      digitalWrite(hooter, HIGH);
+      digitalWrite(buzzer, HIGH);
+      test_mode=buzzer;
+      outputEnabled = false;
+      flagconectado=2;
+      InicioSistema(flagconectado);
+      delay(1000);
+      tiempoActual=millis();
+      tiempoAmbarDetected=millis();
+      tiempoDetected=millis();
+      frecuenciaParpadeo=frecuenciaParpadeo1;
+    }
   }
 }
 
@@ -318,7 +282,6 @@ void InicioSistema(int flagConexionSistema){
 void Finish()
 {
   Serial.print("Se entro a la funcion Finish");
-  Serial.print("LCD: FINALIZACION DE LA SECUENCIA - LED ROJO");
   Serial.println("Led rojo encendido");
   safeDigitalWrite(led_red, LOW); //<- Descomentar
   safeDigitalWrite(test_mode, LOW);
@@ -331,14 +294,6 @@ void Finish()
   datatx.detection = "0"; // detection: 
   datatx.state = "1"; // state: ESP32 envia a la RN
   send_json(datatx);
-  Serial.println("Reporte emitido");
-  if (String(datatx.count) == "1")
-  {
-    num_count = num_count + 1;
-    Serial.print("Se han efectuado ");
-    Serial.print(num_count);
-    Serial.println("reportes");
-  }
 
   datatx.sv_state = "1";
   datatx.count = "0";
@@ -347,11 +302,11 @@ void Finish()
 
   frecuenciaParpadeo=frecuenciaParpadeo1;//Restablece el tiempo parpadeo del led amarillo al lento inicial
   flagparpadeoAmbar=0;//Restablece el flag de parpadeo ambar
-  flagparpadeoVerde=0;//Restablece el flag de parpadeo verde
   tiempoDetected=tiempoActual;
   tiempoAmbarDetected=tiempoActual;
+  flagconectado=2;
+  InicioSistema(flagconectado);
   Serial.print("Se terminó la funcion Finish");
-  
 }
 
 //Activa parpadeo led ambar por 15seg
@@ -359,7 +314,6 @@ void Detected()
 {
   if (String(datatx.detection) == "1" && String(datatx.state)=="0")
   {
-    Serial.print("LCD: ESTADO DE DETECCIÓN - LED AMARILLO");
     Serial.println("Detected");
     if((tiempoActual - tiempoAmbarDetected) >= frecuenciaParpadeo){
       if(flagparpadeoAmbar==0){
@@ -407,7 +361,6 @@ void Detected()
 
 // Función Inicio WiFi
 void wifiInit() {
-  Serial.println("LCD: ENTABLANDO CONEXIÓN WIFI");
   Serial.print("Connecting to ");
   Serial.println(ssid);
 
@@ -418,15 +371,13 @@ void wifiInit() {
     flagconectado=0;
     InicioSistema(flagconectado);
     Serial.print(".");
-    delay(100);
-    Serial.println("Memoria Libre: " + ESP.getFreeSketchSpace());
+    //delay(10);
   }
 
   // Conexión exitosa a WiFi
   Serial.println("");
   Serial.println(WiFi.status()); // Se verifica la conexión de WiFi con status: WL_CONNECTED. Ref: https://www.arduino.cc/reference/en/libraries/wifi/wifi.status/
   Serial.println("WiFi connected");
-  Serial.println("LCD: CONEXIÓN WIFI ESTABLECIDA CON ÉXITO");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP()); // Se printea la IP de conexión
   flagconectado=1;
@@ -438,27 +389,25 @@ void reconnect()
 {
   while (!client.connected())
   {
-    Serial.println("LCD: ENTABLANDO CONEXIÓN CON EL BROKER");
     Serial.println("Connecting to MQTT...");
-    if (client.connect("HARKAI-ESP32-Prueba-2", brokerUser, brokerPass))
+    if (client.connect(clientID.c_str()))
     {
-      Serial.println("Conexión exitosa");
-      Serial.println("LCD: CONEXIÓN CON EL BROKER ESTABLECIDA CON ÉXITO");
+      Serial.println("Conexión exitosa al muchacho con ID: " + clientID);
       Serial.print(client.state());
       client.subscribe(inTopic);
       datatx.sv_state="1"; //Indica que la conexión al broker es exitosa
-      flagconectado=1;
     }
     else
     {
-      Serial.println("LCD: CONEXIÓN FALLIDA CON EL BROKER - REINTENTANDO EN 3 SEGUNDOS");
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 3 seconds");
-      flagconectado=0;
     }
+    flagconectado=1;
     InicioSistema(flagconectado);
   }
+  flagconectado=2;
+  InicioSistema(flagconectado);
 }
 
 void callback(char *topic, byte *message, int length)
@@ -476,7 +425,6 @@ void callback(char *topic, byte *message, int length)
 }
 
 void setup() {
-  Serial.println("LCD: INICIO DEL SETEO DE LA ESP32");
   Serial.begin(9600);
   Init_leds();
   Init_System();
@@ -495,27 +443,17 @@ void loop() {
     }
     client.loop();
 
-    Serial.println("Memoria Libre: " + ESP.getFreeSketchSpace());
-
     tiempoActual=millis();
 
-    activacionManual();
-    
-    
-    
-
-    Serial.println(String(datatx.mode));
+    Serial.println(String(datatx.detection));
     if(String(datatx.detection)=="0"){
-      Serial.println("LCD: ESTADO PRINCIPAL - LED AMARRILLO APAGADO");
       tiempoAmbarDetected=millis();
       tiempoDetected=millis();
+      frecuenciaParpadeo=frecuenciaParpadeo1;
     }
-    Serial.println("LCD: ESTADO DE DATATX: " + String(datatx.sv_state) + String(datatx.count) + String(datatx.detection) + String(datatx.state) + String(datatx.mode) + String(datatx.id));
-    
-    //Serial.println("Loop Principal");
 
     if ((tiempoActual - lastTime > frecuenciaPrincipal) && String(datatx.id)==id){
-      //Serial.println("Dentro de la lógica principal");
+      Serial.println("Dentro de la lógica principal");
       Detected();
       lastTime = millis();
     }
