@@ -1,26 +1,58 @@
-#include <Arduino.h>
-#include <WiFi.h>
-#include <PubSubClient.h>
-#include <ArduinoJson.h>
+# HarkAI ESP32
 
-const int JSON_BUFFER = 256;//Tamaño del buffer, para este caso 256 bytes
+El siguiente documento detalla la programación del código diseñado para el funcionamiento del sistema integrado de detección de EPPs (muchacho).
 
-// Definición de obj de librerías 
-WiFiClient espClient; //Cliente del esp
-PubSubClient client(espClient);
-DynamicJsonDocument doc(JSON_BUFFER); // Define el tamaño del buffer 
+# Instalación de código
+
+Para la instalación del código es necesario clonar el proyecto subido en el presente repositorio en la dirección del la carpeta en la que se desea administrar el proyecto.
+
+```bash
+gh repo clone AlexCalizaya/HarkAI-ESP32-Final
+```
+Posterior a ello, ejecutar Visual Studio Code, importar el proyecto en PlatformIO y seleccionar la tarjeta "Espressif ESP32 Dev Module".
+
+A continuación, se abrirá el proyecto en el entorno de desarrollo en la cuál podrá hacer las modificaciones o integraciones concernientes.
+
+# Explicación del código (last update)
+
+El código consiste en el control de dispositivos visuales y auditivos para la alerta ante incidentes detectados por el Centro de procesamiento de Inteligencia Artificial diseñado por HarkTech.
+
+## Librerías
+Se importan las siguientes librerías:
+
+```Arduino
+#include <Arduino.h> // Framework utilizado
+#include <WiFi.h> // Conexión WiFi
+#include <PubSubClient.h> // Conexión con el broker
+#include <ArduinoJson.h> // Manejo de objetos json
+```
+## Variables globales
+Las variables utilizadas son las siguientes:
+
+Estructura de objetos principales:
+```Arduino
+const int JSON_BUFFER = 256; //Tamaño del buffer
+// Indica el conteo de la infracción por ausencia de EPP después de los 15 segundos
+WiFiClient espClient; //Cliente Wifi
+PubSubClient client(espClient); // Cliente json
+DynamicJsonDocument doc(JSON_BUFFER); // Crea un json dinámico
 
 struct Datos
 {
   const char *sv_state; // Indica el estado del sistema (1: El sistema está conectado, 0 : El sistema no lo está)
-  const char *count; // Indica el conteo de la infracción por ausencia de EPP después de los 15 segundos
-  const char *detection; 
-  const char *state;
-  const char *mode;
-  const char *id;
+  const char *count; // Indica la infracción por ausencia de EPP después de los 15 segundos
+  const char *detection; // Señal que dirije el inicio o detención del conteo de los 15 segundos del SMP
+  const char *state; // Indica quien realiza la comunicación [0: IA, 1: SMP]
+  const char *mode; // Indica el modo en el que se encuentra el SMP [0: Modo Industrial (Normal), 1: Modo Desarrollo (Prueba), 2: Modo silencio]
+  const char *id; // Identificador de cada SMP
 };
-Datos datatx;
 
+Datos datatx; // Se define el objeto Datos
+```
+
+Variables de comunicación:
+
+```Arduino
 // Credenciales WiFi
 const char *ssid = "S21 FE de Alex";// Nombre del Wifi
 const char *password = "12345678";// Contraseña
@@ -32,34 +64,20 @@ const char *mqtt_server = "broker.emqx.io"; //Servidor mqtt del sistema
 const char *inTopic = "CARRANZA/HARKAI"; // Del broker al ESP32
 const char *outTopic = "CARRANZA/HARKAI/RX"; // Del ESP32 al broker
 
-// ------------------------
-//   Variables globales  //
-// ------------------------
-
-// Autenticadores
-
 const char *id = "4"; // ID del muchacho
-String clientID = "HARKAI-ESP32-" + String(id);
+String clientID = "HARKAI-ESP32-" + String(id); // Arma un string para crear el ClientID - (Identificador de dispositivo IoT para el broker)
 
-// Tiempo
+char messages[50]; // Se define el tamaño de la cadena de lectura del broker (arbitrario)
+```
 
-// Validados
-long tiempoActual=0, lastTime=0, frecuenciaPrincipal=100;
-
-// Por validar
-unsigned long tiempoAmbarDetected, frecuenciaParpadeo, tiempoDetected, tiempoFinalDetected=15000;
-unsigned long frecuenciaParpadeo1=1000, frecuenciaParpadeo2=500, frecuenciaParpadeo3=200;
-unsigned long frencuenciaParpadeo;
-unsigned long tiempoIniParpadeoSist=0;
-
-int flagparpadeoAmbar=0;//Flag que indica el estado del parpadeo del led ámbar(0 apagado, 1 encendido)
-int flagparpadeoVerde=0;//Flag que indica el estado del parpadeo del led verde(0 apagado, 1 encendido)
-int flagconectado=0;//Flag que indica si el sistema está conectado o no
+Variables lógicas:
+```Arduino
+int flagparpadeoAmbar=0; // Flag que indica el estado del parpadeo del led ámbar (0 apagado, 1 encendido)
+int flagparpadeoVerde=0; // Flag que indica el estado del parpadeo del led verde (0 apagado, 1 encendido)
+int flagconectado=0; // Flag que indica el inicio del sistema [0: Energizado - Conectando a internet, 1: Conectando al broker - SMP conectado a la red sin internet, 2: Sistema en funcionamiento óptimo]
 int flagLedAmbar = 0; // Indica cuando el estado del los 15 segundos está activo, es decir cuando se detecta falta de EPP
-int state_change;
-String mode_before = "0";
-
-char messages[50];
+int state_change // Indica el cambio de estado de las variables;
+String mode_before = "0"; // Inicializo el modo en Modo Industrial
 
 //Pines de conexion;
 // 4 Relay Module
@@ -68,17 +86,45 @@ const int led_yellow = 25; // Para ámbar [4RM:IN2] 25
 const int led_green = 26;  // Para verde [4RM:IN3] 26
 const int buzzer = 27; // Para buzzer [4RM:IN4] 27
 // 2 Relay Module
-const int hooter = 32; // Para sirena [2RM:IN1] (cambiado para el debug) CABLE MORADO 32
+const int hooter = 32; // Para bocina [2RM:IN1] (cambiado para el debug) CABLE MORADO 32
 const int rele2 = 35; // Para backup [2RM:IN2] CABLE NARANJA 35
 
 // Variable global para testeo
 int test_mode = hooter;
 
-bool outputEnabled = true;  // Inicialmente deshabilitado
+bool outputEnabled = true;  // Bandera booleana para definir cuando permitir el funcionamiento de las luces y bocinas (digitalWrite). Esto puede ser definido según el modo definido
+```
 
-// Funciones lógicas
+Variables temporales:
 
+```Arduino
+// Tiempo
 
+// Validados
+long tiempoActual=0; // Variable general que maneja el tiempo del SMP
+long lastTime=0; // Bandera temporal de la lógica principal
+long frecuenciaPrincipal=100; // Frecuencia de lectura de la lógica principal. Se coloca para evitar llenar el buffer de sistema embebido.
+
+unsigned long tiempoAmbarDetected; // Bandera temporal del parpadeo de Detected activado
+unsigned long frecuenciaParpadeo; // Variable dinámica para cambiar la frecuencia de parpadeo
+unsigned long tiempoDetected; // Bandera para cambiar la frecuencia del led ámbar en Detected
+unsigned long tiempoFinalDetected=15000; // Variable para definir el tiempo final de 
+unsigned long frecuenciaParpadeo1=1000; // Constante de frecuencia temporal 1
+unsigned long frecuenciaParpadeo2=500; // Constante de frecuencia temporal 2
+unsigned long frecuenciaParpadeo3=200; // Constante de frecuencia temporal 3
+unsigned long frencuenciaParpadeo; // Variable dinámica que cambia según la frecuencia de tiempo asignada (1,2,3)
+unsigned long tiempoIniParpadeoSist=0; // Bandera para controlar el tiempo de parpadeo del inicio de sistema
+```
+
+## Funciones
+Las funciones utilizadas se dividen en funciones de comunicación y lógica:
+
+### Función de comunicación
+Las siguientes son las funciones utilizadas para la comunicación del ESP32 con el Broker:
+
+### Read_json
+Funcion para la lectura del json recibido por el broker TopicIn.
+```Arduino
 Datos read_json(byte *message)
 {
   DynamicJsonDocument doc(JSON_BUFFER);
@@ -99,8 +145,11 @@ Datos read_json(byte *message)
   datos.id = doc["id"];
   return datos;
 }
+```
+### Send_json
+Función para enviar json al broker TopicOut.
 
-
+```Arduino
 void send_json(Datos datatx)
 {
   // Crear un objeto JSON y asignar valores desde la estructura
@@ -122,7 +171,15 @@ void send_json(Datos datatx)
   client.publish(outTopic, buffer, n);
 }
 
-//Inicializa pines ESP32
+```
+
+### Función de lógica
+Las siguientes son funciones utilizadas para la secuencia del sistema:
+
+### Init_leds
+Función para el inicializar los leds y dispositivos conectados al SMP.
+
+```Arduino
 void Init_leds()
 {
   pinMode(led_green, OUTPUT);
@@ -139,13 +196,14 @@ void Init_leds()
   digitalWrite(hooter, HIGH); 
   digitalWrite(rele2, HIGH); 
 }
+```
 
-//Determina las condiciones iniciales de la energización del muchacho
+### Init_System
+Determina las condiciones iniciales del SMP al energizar el sistema.
+
+```Arduino
 void Init_System()
 {
-  //////////////////////////////////////
-  // Inicialización del sistema
-  //////////////////////////////////////
   datatx.sv_state = "1";
   datatx.count = "0";
   datatx.detection = "0";
@@ -162,15 +220,23 @@ void Init_System()
   tiempoDetected=millis();
 
   frecuenciaParpadeo=frecuenciaParpadeo1;
-  //////////////////////////////////////
 }
+```
 
+### SafeDigitalWrite
+Función que limita el funcionamiento de digitalWrite para ciertos casos. Se utiliza en la función cambiar_modo.
+
+```Arduino
 void safeDigitalWrite(int pin, int value) {
     if (outputEnabled || pin == led_green) {
         digitalWrite(pin, value);
     }
 }
+```
 
+### States_changed
+Función para cambiar el estado actual de modo. En caso el modo sea el mismo que el anterior, se mantiene el estado anterior del modo; encambio, si el modo nuevo no es igual al anterior, se actualiza el valor del modo.
+```Arduino
 void states_changed(String estadoActual_modo){
   if(mode_before == estadoActual_modo){
     state_change = 0;
@@ -179,8 +245,15 @@ void states_changed(String estadoActual_modo){
     state_change = 1;
   }
 }
+```
+### InicioSistema
 
-//Funcion para parpadeo antes de conexion
+Función para definir la señalización de la baliza según el proceso en el que se encuentre el SMP durante su inicio a través de la bandera "flagConexionSistema".
+- Estado energizado - conexión con WiFi [0]: El SMP se encuentra energizado y busca la señal WiFi definida para realizar la conexión. La baliza parpadea todas las luces con un periodo de 1 segundo hasta establecer la conexión WiFi.
+- Estado conexión con Broker [1]: El SMP ha establecido la conexión WiFi. El sistema procede a establecer la conexión con el broker EMQX. El led verde de la baliza parpadea con un periodo de 3 segundos como señal de que se encuentra en dicho proceso. Nota importante: Es posible que el sistema se encuentre en este estado cuando no hay internet a pesar de que la conexión WiFi con el dispositivo proveedor (router, modem, AP u otro) haya sido realizada.
+
+- Estado funcionamiento óptimo [2]: El SMP se encuentra en su funcionamiento óptimo para recibir información de la IA y notificar las irregularidades presentes en planta producto de la ausencia de EPPs.
+```Arduino
 void InicioSistema(int flagConexionSistema){
   tiempoActual=millis(); //Actualización del tiempo actual en millis
 
@@ -225,7 +298,15 @@ void InicioSistema(int flagConexionSistema){
     Serial.println("Led verde encendido");
   }
 }
+```
+### Cambio_modo
+Función para el cambio de modo del SMP. Los modos programados son los siguientes:
+- Modo Industrial [0]: El SMP utiliza la bocina industrial para notificar la sanción de un evento irregular producto de la ausencia de EPPs.
+- Modo Desarrollo [1]: El SMP utiliza el buzzer para señalizar la irregularidad detectada.
+- Modo Silencio [2]: El SMP desactiva el uso de alguna señal sonora y visual, a excepción de la luz verde, la cual seguirá prendida como señal de funcionamiento del SMP.
 
+
+```Arduino
 void cambio_modo(){
   
   if (String(datatx.id)==id) {
@@ -276,7 +357,11 @@ void cambio_modo(){
     }
   }
 }
+```
+### Finish
+Función que se encarga de la señalización visual de que se ha emitido un reporte a la CPIA. El led rojo se enciende y se envía un json al broker para indicar la finalización del conteo.
 
+```Arduino
 //Activa led rojo y manda confirmacion de cuenta a RN
 void Finish()
 {
@@ -307,7 +392,11 @@ void Finish()
   InicioSistema(flagconectado);
   Serial.print("Se terminó la funcion Finish");
 }
+```
+### Detected
+La siguiente función se encarga de realizar la señal del led ámbar en la baliza producto de la detección de un escenario correctivo de la IA (asuencia de EPP). El led ámbar parpadea en 3 velocidades como señal que el tiempo de tolerancia está por finalizar (15 segundos).
 
+```Arduino
 //Activa parpadeo led ambar por 15seg
 void Detected()
 {
@@ -354,87 +443,14 @@ void Detected()
     Finish();
   }
 }
+```
 
+#### Función principal
 
-// Funciones de configuración
+La siguiente es la función principal del código para controlar todas las funciones incorporadas al código.
 
-// Función Inicio WiFi
-void wifiInit() {
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-
-  // Intento de conexión WiFi del ESP32
-  WiFi.begin(ssid, password);
-
-  while (WiFi.status() != WL_CONNECTED){
-    flagconectado=0;
-    InicioSistema(flagconectado);
-    Serial.print(".");
-    //delay(10);
-  }
-
-  // Conexión exitosa a WiFi
-  Serial.println("");
-  Serial.println(WiFi.status()); // Se verifica la conexión de WiFi con status: WL_CONNECTED. Ref: https://www.arduino.cc/reference/en/libraries/wifi/wifi.status/
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP()); // Se printea la IP de conexión
-  flagconectado=1;
-  InicioSistema(flagconectado);
-}
-
-//Funcion para reconectar con broker
-void reconnect()
-{
-  while (!client.connected())
-  {
-    Serial.println("Connecting to MQTT...");
-    if (client.connect(clientID.c_str()))
-    {
-      Serial.println("Conexión exitosa al muchacho con ID: " + clientID);
-      Serial.print(client.state());
-      client.subscribe(inTopic);
-      datatx.sv_state="1"; //Indica que la conexión al broker es exitosa
-    }
-    else
-    {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 3 seconds");
-    }
-    flagconectado=1;
-    InicioSistema(flagconectado);
-  }
-  flagconectado=2;
-  InicioSistema(flagconectado);
-}
-
-void callback(char *topic, byte *message, int length)
-{
-    Serial.println("Mensaje recibido:");
-    message[length] = '\0';
-    Serial.println((char *)message);
-    datatx=read_json(message);
-    // Serial.println(String(datatx.mode));
-    // Serial.println(mode_before);
-    states_changed(String(datatx.mode));
-    if(state_change){// Se verifica si se ha cambiado de modo
-      cambio_modo(); 
-    }
-}
-
-void setup() {
-  Serial.begin(9600);
-  Init_leds();
-  Init_System();
-  wifiInit();
-  client.setServer(mqtt_server, 1883);
-  client.setCallback(callback);
-}
-
-void loop() {
-
-  if(WiFi.status() != WL_CONNECTED){ // verifica si aún existe conexión WiFi
+```Arduino
+if(WiFi.status() != WL_CONNECTED){ // verifica si aún existe conexión WiFi
     wifiInit();
   }else{
     if (!client.connected()){
@@ -457,4 +473,14 @@ void loop() {
       lastTime = millis();
     }
   }
-}
+```
+
+## Preguntas frecuentes
+- Explicación del comportamiento de la baliza al iniciar el sistema:
+
+- Definición de clientID:
+Se presentaron problemas para la conexión del sistema con el broker. Anteriormente se colocaba un string como cliente, cuando este debe variar según cada dispositivo instalado debido a que naturalmente, si dos dispositivos están conectados mediante un mismo clientID, ambos se desconectan del broker.
+
+- Problemas con el manejo temporal de funciones:
+
+
