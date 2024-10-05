@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <ArduinoOTA.h>
 
 const int JSON_BUFFER = 256;//Tamaño del buffer, para este caso 256 bytes
 
@@ -22,8 +23,16 @@ struct Datos
 Datos datatx;
 
 // Credenciales WiFi
-const char *ssid = "S21 FE de Alex";// Nombre del Wifi
-const char *password = "12345678";// Contraseña
+const char *ssid = "HarkAI_Demo";// Nombre del Wifi
+const char *password = "nomeacuerdo1956";// Contraseña
+
+
+// Configuración de la IP estática (debe ser separada por comas)
+IPAddress local_IP(192, 168, 0, 114);  // Cambia esto a la IP que deseas para el ESP32
+IPAddress gateway(192, 168, 0, 1);     // Puerta de enlace, normalmente es la IP del router
+IPAddress subnet(255, 255, 255, 0);     // Máscara de subred
+IPAddress primaryDNS(8, 8, 8, 8);       // Servidor DNS primario
+IPAddress secondaryDNS(8, 8, 4, 4);     // Servidor DNS secundario (opcional)
 
 // Broker MQTT
 const char *mqtt_server = "broker.emqx.io"; //Servidor mqtt del sistema
@@ -115,7 +124,7 @@ void send_json(Datos datatx)
   // Buffer para almacenar la cadena JSON
   char buffer[128];
 
-  // Serializar el JSON directamente en el buffer
+  // Serializar el JSON directamente en el buffer+
   size_t n = serializeJson(jsonDoc, buffer, sizeof(buffer));
 
   // Publicar el buffer directamente en el tema MQTT
@@ -425,6 +434,12 @@ void callback(char *topic, byte *message, int length)
 
 void setup() {
   Serial.begin(9600);
+
+  // Configuración de IP estática antes de conectar al WiFi
+  if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+    Serial.println("Fallo en la configuración de IP estática");
+  }
+  ArduinoOTA.begin();  // Starts OTA
   Init_leds();
   Init_System();
   wifiInit();
@@ -440,6 +455,7 @@ void loop() {
     if (!client.connected()){
       reconnect();
     }
+    ArduinoOTA.handle();
     client.loop();
 
     tiempoActual=millis();
