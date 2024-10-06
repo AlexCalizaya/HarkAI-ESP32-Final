@@ -19,6 +19,7 @@ struct Datos
   const char *state;
   const char *mode;
   const char *id;
+  const char *timestamp;
 };
 Datos datatx;
 
@@ -28,7 +29,7 @@ const char *password = "nomeacuerdo1956";// Contraseña
 
 
 // Configuración de la IP estática (debe ser separada por comas)
-IPAddress local_IP(192, 168, 0, 114);  // Cambia esto a la IP que deseas para el ESP32
+IPAddress local_IP(192, 168, 0, 111);  // Cambia esto a la IP que deseas para el ESP32
 IPAddress gateway(192, 168, 0, 1);     // Puerta de enlace, normalmente es la IP del router
 IPAddress subnet(255, 255, 255, 0);     // Máscara de subred
 IPAddress primaryDNS(8, 8, 8, 8);       // Servidor DNS primario
@@ -47,7 +48,7 @@ const char *outTopic = "CARRANZA/HARKAI/RX"; // Del ESP32 al broker
 
 // Autenticadores
 
-const char *id = "4"; // ID del muchacho
+const char *id = "1"; // ID del muchacho
 String clientID = "HARKAI-ESP32-" + String(id);
 
 // Tiempo
@@ -65,8 +66,9 @@ int flagparpadeoAmbar=0;//Flag que indica el estado del parpadeo del led ámbar(
 int flagparpadeoVerde=0;//Flag que indica el estado del parpadeo del led verde(0 apagado, 1 encendido)
 int flagconectado=0;//Flag que indica si el sistema está conectado o no
 int flagLedAmbar = 0; // Indica cuando el estado del los 15 segundos está activo, es decir cuando se detecta falta de EPP
-int state_change;
-String mode_before = "0";
+int state_changed_mode;
+String mode_before = "1";
+String timestamp = ""; // Variable global de timestamp
 
 char messages[50];
 
@@ -84,6 +86,12 @@ const int rele2 = 35; // Para backup [2RM:IN2] CABLE NARANJA 35
 int test_mode = hooter;
 
 bool outputEnabled = true;  // Inicialmente deshabilitado
+bool detectionActive = false;
+
+String sv_state= "";
+String count= "";
+String detection= "";
+String state= "";
 
 // Funciones lógicas
 
@@ -91,7 +99,13 @@ bool outputEnabled = true;  // Inicialmente deshabilitado
 Datos read_json(byte *message)
 {
   DynamicJsonDocument doc(JSON_BUFFER);
+  Serial.print("Entre");
   DeserializationError error = deserializeJson(doc, (char *)message);
+
+  Serial.print("Debajo de DeserializationError");
+
+  Serial.print("Error abajo si hay");
+  Serial.println(error.c_str());
 
   if (error)
   {
@@ -101,11 +115,12 @@ Datos read_json(byte *message)
 
   Datos datos;
   datos.sv_state = doc["server_state"];
-  datos.count = doc["count"];
-  datos.detection = doc["detection"];
-  datos.state = doc["state"];
-  datos.mode = doc["mode"];
-  datos.id = doc["id"];
+  datos.count = doc["count"];          
+  datos.detection = doc["detection"];  
+  datos.state = doc["state"];          
+  datos.mode = doc["mode"];            
+  datos.id = doc["id"];                
+  datos.timestamp = doc["timestamp"];  
   return datos;
 }
 
@@ -120,6 +135,7 @@ void send_json(Datos datatx)
   jsonDoc["state"] = datatx.state;
   jsonDoc["mode"] = datatx.mode;
   jsonDoc["id"] = String(id);
+  jsonDoc["timestamp"] = timestamp;
 
   // Buffer para almacenar la cadena JSON
   char buffer[128];
@@ -161,6 +177,14 @@ void Init_System()
   datatx.state = "0";
   datatx.mode = "0";
   datatx.id=id; // Asignación de ID del dispositivo
+  datatx.timestamp="";
+
+  sv_state = "1";
+  count = "0";
+  detection = "0";
+  state = "0";
+  id=id; // Asignación de ID del dispositivo
+  timestamp="";
 
   digitalWrite(led_green, LOW);
   digitalWrite(led_red, LOW);
@@ -178,15 +202,6 @@ void safeDigitalWrite(int pin, int value) {
     if (outputEnabled || pin == led_green) {
         digitalWrite(pin, value);
     }
-}
-
-void states_changed(String estadoActual_modo){
-  if(mode_before == estadoActual_modo){
-    state_change = 0;
-  }else{
-    mode_before = estadoActual_modo;
-    state_change = 1;
-  }
 }
 
 //Funcion para parpadeo antes de conexion
@@ -286,6 +301,29 @@ void cambio_modo(){
   }
 }
 
+void states_changed_mode(String estadoActual_modo){
+  if(mode_before == estadoActual_modo){
+    state_changed_mode = 0;
+  }else{
+    mode_before = estadoActual_modo;
+    state_changed_mode = 1;
+  }
+}
+
+void states_changed_general(String estadoActual_id){
+  if(String(id) == estadoActual_id){
+    if(String(datatx.sv_state)=="1" || String(datatx.sv_state)=="0"){sv_state=datatx.sv_state;}
+    if(String(datatx.count)=="1" || String(datatx.count)=="0"){count=datatx.count;}
+    if(String(datatx.detection)=="1" || String(datatx.detection)=="0"){detection=datatx.detection;}
+    if(String(datatx.state)=="1" || String(datatx.state)=="0"){state=datatx.state;}
+    timestamp=datatx.timestamp;
+    states_changed_mode(String(datatx.mode));
+    if(state_changed_mode){// Se verifica si se ha cambiado de modo
+      cambio_modo(); 
+    }
+  }
+}
+
 //Activa led rojo y manda confirmacion de cuenta a RN
 void Finish()
 {
@@ -308,6 +346,12 @@ void Finish()
   datatx.detection = "0";
   datatx.state = "0";
 
+  sv_state = "1";
+  count = "0";
+  detection = "0";
+  state = "0";
+
+
   frecuenciaParpadeo=frecuenciaParpadeo1;//Restablece el tiempo parpadeo del led amarillo al lento inicial
   flagparpadeoAmbar=0;//Restablece el flag de parpadeo ambar
   tiempoDetected=tiempoActual;
@@ -320,7 +364,7 @@ void Finish()
 //Activa parpadeo led ambar por 15seg
 void Detected()
 {
-  if (String(datatx.detection) == "1" && String(datatx.state)=="0")
+  if (detection == "1" && state=="0")
   {
     Serial.println("Detected");
     if((tiempoActual - tiempoAmbarDetected) >= frecuenciaParpadeo){
@@ -344,7 +388,7 @@ void Detected()
     flagLedAmbar = 1;
   }
 
-  else if (String(datatx.detection) == "0" && String(datatx.state)=="0")
+  else if (detection == "0" && state=="0")
   {                                // Si se corrigió la falta de epp
     flagLedAmbar = 0;
     safeDigitalWrite(led_yellow, HIGH); // Desactiva el relé ámbar <- Descomentar
@@ -355,7 +399,7 @@ void Detected()
   }
 
   // Verifica si han pasado 15 segundos desde la activación del relé
-  if (flagLedAmbar == 1 && ((tiempoActual - tiempoDetected) >= tiempoFinalDetected) && String(datatx.state)=="0")
+  if (flagLedAmbar == 1 && ((tiempoActual - tiempoDetected) >= tiempoFinalDetected) && state=="0")
   {
     safeDigitalWrite(led_yellow, HIGH); // Desactiva el relé automáticamente <- Descomentar
     Serial.println("Led amarillo apagado"); 
@@ -424,12 +468,8 @@ void callback(char *topic, byte *message, int length)
     message[length] = '\0';
     Serial.println((char *)message);
     datatx=read_json(message);
-    // Serial.println(String(datatx.mode));
-    // Serial.println(mode_before);
-    states_changed(String(datatx.mode));
-    if(state_change){// Se verifica si se ha cambiado de modo
-      cambio_modo(); 
-    }
+
+    states_changed_general(String(datatx.id));
 }
 
 void setup() {
@@ -459,18 +499,30 @@ void loop() {
     client.loop();
 
     tiempoActual=millis();
+    Serial.println("Fuera del loop json");
 
-    Serial.println(String(datatx.detection));
-    if(String(datatx.detection)=="0"){
-      tiempoAmbarDetected=millis();
-      tiempoDetected=millis();
-      frecuenciaParpadeo=frecuenciaParpadeo1;
-    }
+    if (sv_state=="1" && state=="0"){
+      Serial.println(sv_state);
+      Serial.println(count);
+      Serial.println(detection);
+      Serial.println(state);
+      //Serial.println(mode);
+      Serial.println(id);
+      Serial.println(timestamp);
+      //delay(500);
 
-    if ((tiempoActual - lastTime > frecuenciaPrincipal) && String(datatx.id)==id){
-      Serial.println("Dentro de la lógica principal");
-      Detected();
-      lastTime = millis();
+      if(detection=="0"){
+        safeDigitalWrite(led_yellow, HIGH); // Activa el rele ambar <- Descomentar
+        tiempoAmbarDetected=millis();
+        tiempoDetected=millis();
+        frecuenciaParpadeo=frecuenciaParpadeo1;
+      }
+      
+      if ((tiempoActual - lastTime > frecuenciaPrincipal)){
+        Serial.println("Dentro de la lógica principal");
+        Detected();
+        lastTime = millis();
+      }
     }
   }
 }
